@@ -30,7 +30,6 @@ object Spinner {
 
     val graph = Graph( nodeList, edgeList )
 
-
     graph.convertToCanonicalEdges( (l, r) => l+r )
 
   }
@@ -40,7 +39,7 @@ object Spinner {
     val degrees = mutable.Map[Long,Long]();
     graph.ops.degrees.collect().foreach( d => degrees.put(d._1, d._2) )
 
-    val spinnerGraph = graph.mapVertices { case (vid, _) => println(vid)
+    val spinnerGraph = graph.mapVertices { case (vid, _) =>
       new VertexValue(
         degree = degrees.getOrElse(vid,0L)
     ) }
@@ -51,11 +50,12 @@ object Spinner {
 
       //verticesDegree.add(e.srcId.toLong);
 
-      println(" Current: "+e)
-      //val currentScore = graph.edges.filter( ex => ex.dstId == e.dstId || ex.srcId == e.dstId ) )
+      val w_u_v =  e.attr.asInstanceOf[Long]
+      val delta_au_l = e.dstAttr.currentPartition
 
-      //println("Message: (" + e.srcId + ", Map(" + e.dstAttr.currentPartition + " -> 1L) , (" + e.dstId + ", Map(" + e.srcAttr.currentPartition + " -> 1L)")
-      Iterator((e.srcId, Map(e.dstAttr.currentPartition -> 1L)))//, (e.dstId, Map(e.srcAttr.currentPartition -> 1L))
+      println(" Current: "+e)
+      println( s"Message: (" + e.srcId + ", Map(" + e.dstAttr.currentPartition + " -> "+e.attr+") ")
+      Iterator( ( e.srcId, Map(e.dstAttr.currentPartition -> w_u_v )) )
     }
 
     def mergeMessage(count1: Map[Int, Long], count2: Map[Int, Long]): Map[Int, Long] = {

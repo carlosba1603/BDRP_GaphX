@@ -134,7 +134,8 @@ object MainGraphPartitioner {
     //deleteNeo4J()
     //    saveNeo4J(graph)
 
-    println( "\n=> Partitions (partitionId, nodes) " )
+    println( "\n=> Nodes (partitionId, nodes) " )
+    spark.sparkContext.parallelize(communities).collect().foreach(println(_))
     //spark.sparkContext.parallelize(communities).map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().take(20).foreach(println)
 
     println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )

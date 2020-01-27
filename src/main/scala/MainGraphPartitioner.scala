@@ -10,20 +10,24 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.Random
 import org.neo4j.spark._
-import spinner.{LoadAccumulator, Spinner}
+import partitioner.{Spinner, LabelPropagation, Maximum}
 //import org.neo4j.spark.dataframe.Neo4jDataFrame
 
 object MainGraphPartitioner {
 
-  implicit val verticesDegree = new LoadAccumulator()
+//  implicit val partitionLoads = new LoadAccumulator();
+//
+
   implicit val spark = SparkSession.builder()
     .appName("LearnScalaSpark")
     .config("spark.master", "local[*]")
     .config("spark.neo4j.bolt.password", "admin")
     .getOrCreate()
 
-  spark.sparkContext.register(verticesDegree, "Number of edges by vertex")
-  spark.sparkContext.setLogLevel("ERROR")
+  val sc = spark.sparkContext
+
+//  spark.sparkContext.register(partitionLoads, "Edge load by Partition")
+  sc.setLogLevel("ERROR")
 
   // For implicit conversions like converting RDDs to DataFrames
   import spark.implicits._
@@ -33,11 +37,6 @@ object MainGraphPartitioner {
   case class GraphData(partition:Long)
 
   def main(args: Array[String]): Unit = {
-
-
-
-
-
     //val graphList = getGraphStatList("data")
 
 
@@ -47,48 +46,18 @@ object MainGraphPartitioner {
     //val labelGraph = runOwnLabelPropagation(graph1,5)
 
 
-    runSpinner( "data/Test/Synthetic_3.txt" )
+    runSpinner( "data/Test/Synthetic_4.txt" )
 
-    print( verticesDegree.value.load )
+//    print( partitionLoads.value.load )
 
   }
-
-  def deleteNeo4J(): Unit ={
-    val rdd = Neo4j(spark.sparkContext).cypher("MATCH (d) detach delete d").loadRowRdd
-    println("Nodes in db: "+ rdd.collect().length )
-  }
-//
-//  def saveNeo4J[VD, ED: ClassTag](graph: Graph[VD, ED]): Unit ={
-//    //Neo4j(spark.sparkContext).saveGraph(graph, "rank", Pattern(NameProp("Node"),scala.Seq(NameProp("Link")),NameProp("Node")), merge = true)
-//
-//    val df = graph.edges.map( l => (l.srcId,l.dstId) ).toDF("src", "dst")
-//
-//    val renamedColumns = Map("src" -> "value", "dst" -> "value")
-//
-//    df.printSchema()
-//    df.show()
-//
-//    Neo4jDataFrame.mergeEdgeList( spark.sparkContext, df, ("Node",Seq("src")),("link",Seq.empty),("Node",Seq("dst")), renamedColumns )
-//
-//  }
-
-//  def queryNEo4J(): Unit ={
-//
-//    rdd.collect().foreach(println)
-//
-//    println(rdd.first().schema.fieldNames)
-//
-//    val graphFrame = neo.pattern(("N","value"),("link",null), ("N","value")).loadGraphFrame
-//
-//    graphFrame.vertices.collect().foreach(println)
-//  }
 
 
 
 
   def getGraphStat( path: String ): GraphStatistics ={
 
-    val graph = Spinner.loadGraph( path )
+    val graph = loadGraph( path )
 
     GraphStatistics( path.split("/")(1),
                      graph.numVertices,
@@ -122,126 +91,76 @@ object MainGraphPartitioner {
 
     println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
-    val graph = Spinner.loadGraph(path)
+    val graph = loadGraph(path)
 
 
     //println( graph.vertices )
     //println( graph.edges )
 
 
-    val communities = Spinner.initialize( graph, 1).vertices.collect()//.sortWith(_._1<_._1)
+    val communities = Spinner.initialize( graph, 3, 5).vertices.collect()//.sortWith(_._1<_._1)
     //communities.foreach(println)
     //deleteNeo4J()
     //    saveNeo4J(graph)
 
     println( "\n=> Nodes (partitionId, nodes) " )
-    spark.sparkContext.parallelize(communities).collect().foreach(println(_))
+    sc.parallelize(communities).collect().foreach(println(_))
     //spark.sparkContext.parallelize(communities).map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().take(20).foreach(println)
 
     println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
   }
 
-//  def runLabelPropagation( path:String ): Unit ={
-//
-//    println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
-//
-//    val graph = loadGraph(path)
-//    val communities = labelPropagation( graph, 1).vertices.collect().sortWith(_._1<_._1)
-//    //communities.foreach(println)
-//
-//    println( "\n=> Partitions (partitionId, nodes) " )
-//    spark.sparkContext.parallelize(communities).map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().take(20).foreach(println)
-//
-//    println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
-//
-//  }
+  def runLabelPropagation( path:String ): Unit ={
 
-  def labelPropagation[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
-    require(maxSteps > 0, s"Maximum of steps must be greater than 0, but got ${maxSteps}")
+    println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
-    val lpaGraph = graph.mapVertices { case (vid, _) => vid }
+    val graph = loadGraph(path)
+    val communities = LabelPropagation.run( graph, 1).vertices.collect().sortWith(_._1<_._1)
+    //communities.foreach(println)
 
-    //lpaGraph.vertices.sortByKey().collect().foreach(println)
+    println( "\n=> Partitions (partitionId, nodes) " )
+    spark.sparkContext.parallelize(communities).map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().take(20).foreach(println)
 
-    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, Long])] = {
-      Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
-    }
+    println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
-    def mergeMessage(count1: Map[VertexId, Long], count2: Map[VertexId, Long]): Map[VertexId, Long] = {
-      // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
-      val map = mutable.Map[VertexId, Long]()
-      (count1.keySet ++ count2.keySet).foreach { i =>
-        val count1Val = count1.getOrElse(i, 0L)
-        val count2Val = count2.getOrElse(i, 0L)
-        map.put(i, count1Val + count2Val)
-      }
-      map.toMap
-    }
-
-    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
-      if (message.isEmpty) {
-        attr
-      }else {
-        //println(vid+" = "+message+" result "+ message.maxBy(_._2)._1)
-        message.maxBy(_._2)._1
-      }
-    }
-
-    val initialMessage = Map[VertexId, Long]()
-
-    Pregel(lpaGraph, initialMessage, maxIterations = maxSteps, EdgeDirection.Both)(
-      vprog = vertexProgram,
-      sendMsg = sendMessage,
-      mergeMsg = mergeMessage)
   }
 
-//  def runMax( path:String ): Unit ={
-//
-//
-//    println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
-//
-//    val graph = loadGraph(path)
-//    val maxGraph = max( graph, 10)
-//    maxGraph.vertices.collect().foreach(println)
-//
-//    println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
-//
-//  }
 
-  def max[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
-    require(maxSteps > 0, s"Maximum of steps must be greater than 0, but got ${maxSteps}")
 
-    val maxGraph = graph.mapVertices { case (vid, _) => vid }
+  def runMax( path:String ): Unit ={
 
-    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Long )] = {
 
-      if( e.srcAttr <= e.dstAttr ){
-        Iterator()
-      }else{
-        Iterator( (e.dstId, e.srcAttr) )
-      }
+    println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
-    }
+    val graph = loadGraph(path)
+    val maxGraph = Maximum.run( graph, 10)
+    maxGraph.vertices.collect().foreach(println)
 
-    def mergeMessage( value1:Long, value2: Long ): Long = {
-      Math.max(value1,value2)
-    }
+    println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
-    def vertexProgram(vid: VertexId, attr: Long, message: Long ): VertexId = {
-      if ( message == Long.MaxValue) { // superstep 0
-        attr
-      } else { // superstep > 0
-        Math.max(attr, message)
-      }
-    }
-
-    val initialMessage = Long.MaxValue
-
-    Pregel(maxGraph, initialMessage, maxIterations = maxSteps, EdgeDirection.Either )(
-      vprog = vertexProgram,
-      sendMsg = sendMessage,
-      mergeMsg = mergeMessage)
   }
 
+
+  def loadGraph( path:String)( implicit spark: SparkSession): Graph[Long, Long] ={
+
+    println("=> Processing "+ path+" ")
+
+    val nodeList = spark.read.textFile(path).rdd
+      .filter(l => !l.contains("#"))
+      .flatMap( _.split("\\s") )
+      .map( node => (node.toLong,1) )
+      .reduceByKey(_+_)
+      .sortBy( node => node )
+      .map(node => ( node._1, node._1) )
+
+    val edgeList = spark.read.textFile(path).rdd
+      .filter(l => !l.contains("#"))
+      .map( l => Edge( l.split("\\s")(0).toInt, l.split("\\s")(1).toInt, 1L ) )
+
+    val graph = Graph( nodeList, edgeList )
+
+    graph.convertToCanonicalEdges( (l, r) => l+r )
+
+  }
 }

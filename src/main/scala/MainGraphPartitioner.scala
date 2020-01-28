@@ -1,17 +1,14 @@
 import java.io.File
 import java.util.Calendar
 
-import org.apache.spark.graphx.{Graph, VertexId, _}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.apache.spark.graphx.{Graph, _}
+import org.apache.spark.sql.SparkSession
 
 import scala.collection.mutable
 import scala.collection.mutable.Queue
-import scala.reflect.ClassTag
-import scala.util.Random
-import org.neo4j.spark._
-import partitioner.{Spinner, LabelPropagation, Maximum}
-//import org.neo4j.spark.dataframe.Neo4jDataFrame
+import partitioner.{LabelPropagation, Maximum, Spinner, VertexValue}
+import utils.Neo4jUtils
+
 
 object MainGraphPartitioner {
 
@@ -21,6 +18,7 @@ object MainGraphPartitioner {
   implicit val spark = SparkSession.builder()
     .appName("LearnScalaSpark")
     .config("spark.master", "local[*]")
+    .config("spark.neo4j.bolt.user", "neo4j")
     .config("spark.neo4j.bolt.password", "admin")
     .getOrCreate()
 
@@ -43,12 +41,14 @@ object MainGraphPartitioner {
     //runMax("data/Test/Synthetic_3.txt")
     //runLabelPropagation("data/liveJournal.txt")
 
-    //val labelGraph = runOwnLabelPropagation(graph1,5)
+
+    runSpinner( "data/Test/facebook.txt", 10, 20 )
+    //Neo4jUtils.deleteNeo4J()
+    //Neo4jUtils.saveNeo4J( graph )
 
 
-   // runSpinner( "data/Test/Synthetic_1.txt" )
+    println("Done!")
 
-    runLabelPropagation("data/Test/Synthetic_4.txt")
 //    print( partitionLoads.value.load )
 
   }
@@ -88,27 +88,25 @@ object MainGraphPartitioner {
   }
 
 
-  def runSpinner( path:String ): Unit ={
+  def runSpinner( path:String, numberOfPartitions: Int, maxSteps: Int ): Unit ={
 
     println( "============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
 
     val graph = loadGraph(path)
 
+    val partitionedGraph = Spinner.initialize( graph, numberOfPartitions, maxSteps )
+    val simpleGraph = partitionedGraph.mapVertices { case (vid,vInfo:VertexValue) => vInfo.currentPartition }
 
-    //println( graph.vertices )
-    //println( graph.edges )
+    println( "\n=> Nodes (nodeId, partitionId) " )
+    simpleGraph.vertices.foreach(println(_))
 
-
-    val communities = Spinner.initialize( graph, 2, 5).vertices.collect()//.sortWith(_._1<_._1)
-    //communities.foreach(println)
-    //deleteNeo4J()
-    //    saveNeo4J(graph)
 
     println( "\n=> Nodes (partitionId, nodes) " )
-    sc.parallelize(communities).collect().foreach(println(_))
-    //spark.sparkContext.parallelize(communities).map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().take(20).foreach(println)
+    simpleGraph.vertices.map( n => (n._2, 1L) ).reduceByKey(_+_).sortByKey().collect().foreach(println)
 
     println( "\n============================== "+Calendar.getInstance().getTime()+" ==============================\n" )
+
+    Neo4jUtils.saveNeo4J(simpleGraph)
 
   }
 
@@ -153,7 +151,7 @@ object MainGraphPartitioner {
       .map( node => (node.toLong,1) )
       .reduceByKey(_+_)
       .sortBy( node => node )
-      .map(node => ( node._1, node._1) )
+      .map(node => (node._1, 0L) )
 
     val edgeList = spark.read.textFile(path).rdd
       .filter(l => !l.contains("#"))

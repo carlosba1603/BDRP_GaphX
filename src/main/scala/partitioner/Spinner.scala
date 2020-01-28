@@ -10,7 +10,7 @@ import scala.util.Random
 object Spinner {
 
 
-  def initialize[VD, ED: ClassTag](graph: Graph[VD, ED], numberOfPartitions: Int, maxSteps: Int)( implicit spark: SparkSession): Graph[VertexValue, ED] = {
+  def initialize[VD:ClassTag, ED: ClassTag](graph: Graph[VD, ED], numberOfPartitions: Int, maxSteps: Int)( implicit spark: SparkSession): Graph[VertexValue, ED] = {
 
     val partitionLoads = mutable.Map[Long,Long]()
     val candidatesLoads = mutable.Map[Long,Long]()
@@ -19,14 +19,14 @@ object Spinner {
     graph.ops.degrees.collect().foreach( d => degreesMap.put(d._1, d._2) )
 
     val totalEdges = degreesMap.map(l => l._2).reduce(_+_);
-    val additionalCapacity = 0.3;
+    val additionalCapacity = 0.2;
     val lambda = 1.0;
     val totalCapacity = Math.round( (1+additionalCapacity) * (totalEdges / numberOfPartitions) )
 
 
-    println("Total Edges: "+totalEdges)
-    println("Total Capacity: "+ totalCapacity)
-    println("")
+//    println("Total Edges: "+totalEdges)
+//    println("Total Capacity: "+ totalCapacity)
+//    println("")
 
 
     val partitionLoadsBcst = spark.sparkContext.broadcast( partitionLoads )
@@ -34,12 +34,13 @@ object Spinner {
 
     val spinnerGraph = graph.mapVertices { case (vid, _) =>
       new VertexValue(
+        vId = vid,
         degree = degreesMap.getOrElse(vid,0L)
     ) }
 
     def sendMessage(e: EdgeTriplet[VertexValue, ED]): Iterator[(VertexId, mutable.Map[Int, Long])] = {
 
-      println(" Current: "+e)
+      //println(" Current: "+e)
 
       val w_u_v =  e.attr.asInstanceOf[Long]
       Iterator( ( e.dstId, mutable.Map(e.srcAttr.currentPartition -> w_u_v )), ( e.srcId, mutable.Map(e.dstAttr.currentPartition -> w_u_v ) ) )
@@ -80,7 +81,7 @@ object Spinner {
 
       } else if ( currentPartition != newPartition ) {
 
-        println("===== Decide Migration =====\n")
+
 
         val remainingCapacity = totalCapacity - partitionLoadsBcst.value.getOrElse( newPartition , 0L).toDouble
         val m_l = candidatesLoadsBcst.value.getOrElse( newPartition, 0L ).toDouble
@@ -88,12 +89,13 @@ object Spinner {
         val migrationProb =  remainingCapacity / m_l
         val migrate = Random.nextDouble()
 
-        println("VId: "+vId)
-        println(s"r($newPartition) / m($newPartition): ( $remainingCapacity / $m_l ) = $migrationProb ")
-        println("Degree: "+vInfo.degree)
-        println("Current partition: "+ currentPartition )
-        println("New partition: "+ newPartition )
-        println(s"Migrate: $migrate p $migrationProb "+(migrate < migrationProb))
+//        println("===== Decide Migration =====\n")
+//        println("VId: "+vId)
+//        println(s"r($newPartition) / m($newPartition): ( $remainingCapacity / $m_l ) = $migrationProb ")
+//        println("Degree: "+vInfo.degree)
+//        println("Current partition: "+ currentPartition )
+//        println("New partition: "+ newPartition )
+//        println(s"Migrate: $migrate p $migrationProb "+(migrate < migrationProb))
 
 
         if( migrationProb >= 1 || migrate < migrationProb  ) {
@@ -106,8 +108,6 @@ object Spinner {
           currentLoad = partitionLoadsBcst.value.getOrElse(currentPartition, 0L)
           partitionLoadsBcst.value.put(currentPartition, currentLoad - vInfo.degree)
 
-
-          println( partitionLoadsBcst.value )
           currentPartition = newPartition
 
         }
@@ -115,16 +115,16 @@ object Spinner {
         var currentLoad = candidatesLoadsBcst.value.getOrElse(newPartition,0L)
         candidatesLoadsBcst.value.put(newPartition, currentLoad - vInfo.degree)
 
-        println("Candidates Load: " +candidatesLoadsBcst.value)
-
-        println("")
+//        println("Candidates Load: " +candidatesLoadsBcst.value)
+//
+//        println("")
 
         newPartition = currentPartition
 
       } else {
 
 
-        println("===== Compute Scores =====\n")
+
 
         ( 0 to numberOfPartitions-1 ).foreach { i =>
           val current = message.getOrElse(i, 0L)
@@ -157,18 +157,19 @@ object Spinner {
 
         }
 
-        println("Vid: "+vId)
-        println("Partition Frequency: " + message)
-        println("Partition Score: "+ scoreMap )
-        println("Degree: "+vInfo.degree)
-        println("Current partition: "+ currentPartition)
-        println("New partition: "+ newPartition )
-
-        println("")
+//        println("===== Compute Scores =====\n")
+//        println("Vid: "+vId)
+//        println("Partition Frequency: " + message)
+//        println("Partition Score: "+ scoreMap )
+//        println("Degree: "+vInfo.degree)
+//        println("Current partition: "+ currentPartition)
+//        println("New partition: "+ newPartition )
+//
+//        println("")
 
       }
 
-      VertexValue( currentPartition, newPartition, vInfo.degree )
+      VertexValue( vId, currentPartition, newPartition, vInfo.degree )
     }
 
 

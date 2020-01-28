@@ -7,6 +7,6 @@ import java.io.IOException
 
 import org.apache.spark.graphx.VertexId
 
-case class VertexValue( currentPartition:Int = -1, newPartition: Int = -1, degree: Long = 0L, active: Boolean = true ) extends Serializable {
-  override def toString: String = s"Current: $currentPartition New: $newPartition Degree: $degree Active: $active"
+case class VertexValue( vId:Long = -1, currentPartition:Int = -1, newPartition: Int = -1, degree: Long = 0L) extends Serializable {
+  override def toString: String = s"Current: $currentPartition New: $newPartition Degree: $degree"
 }

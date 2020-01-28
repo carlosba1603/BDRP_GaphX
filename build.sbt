@@ -14,7 +14,7 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-mllib" % sparkVersion,
   "org.apache.spark" %% "spark-streaming" % sparkVersion,
   "org.apache.spark" %% "spark-hive" % sparkVersion,
-  "neo4j-contrib" % "neo4j-spark-connector" % "2.4.0-M6",
-  "com.amazonaws" % "aws-java-sdk" % "1.11.710"
-
+  "neo4j-contrib" % "neo4j-spark-connector" % "2.2.1-M5",
+  "com.amazonaws" % "aws-java-sdk" % "1.11.710",
+ "graphframes" % "graphframes" % "0.7.0-spark2.4-s_2.11"
 )

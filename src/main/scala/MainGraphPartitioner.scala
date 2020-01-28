@@ -46,8 +46,9 @@ object MainGraphPartitioner {
     //val labelGraph = runOwnLabelPropagation(graph1,5)
 
 
-    runSpinner( "data/Test/Synthetic_4.txt" )
+   // runSpinner( "data/Test/Synthetic_1.txt" )
 
+    runLabelPropagation("data/Test/Synthetic_4.txt")
 //    print( partitionLoads.value.load )
 
   }
@@ -98,7 +99,7 @@ object MainGraphPartitioner {
     //println( graph.edges )
 
 
-    val communities = Spinner.initialize( graph, 3, 5).vertices.collect()//.sortWith(_._1<_._1)
+    val communities = Spinner.initialize( graph, 2, 5).vertices.collect()//.sortWith(_._1<_._1)
     //communities.foreach(println)
     //deleteNeo4J()
     //    saveNeo4J(graph)

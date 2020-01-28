@@ -64,15 +64,15 @@ object Spinner {
 
       if (newPartition == -1) {
 
-        var partition = Random.nextInt(numberOfPartitions)
+        val partition = Random.nextInt(numberOfPartitions)
 
-        if( vId == 2 || vId == 5 ){
-          partition = 0
-        } else {
-          partition = 1
-        }
+//        if( vId == 2 || vId == 5 ){
+//          partition = 0
+//        } else {
+//          partition = 1
+//        }
 
-        var currentLoad = partitionLoadsBcst.value.getOrElse(partition,0L)
+        val currentLoad = partitionLoadsBcst.value.getOrElse(partition,0L)
         partitionLoadsBcst.value.put(partition, currentLoad + vInfo.degree)
 
         currentPartition = partition
